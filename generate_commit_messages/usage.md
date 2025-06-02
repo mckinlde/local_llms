@@ -12,6 +12,13 @@ This project uses the `JosineyJr/generate-conventional-commit-messages` model to
 ```bash
 nix-shell
 ```
+
+### 1.5 If not done already, download the model
+```bash
+chmod +x download_commit_model.sh
+./download_commit_model.sh
+```
+
 The shell will create and activate a Python virtual environment automatically (in .venv/) and install dependencies:
 
     transformers
