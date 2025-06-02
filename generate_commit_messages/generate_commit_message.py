@@ -20,7 +20,7 @@ def get_git_diff():
         return None
 
 def main():
-    token_path = os.path.expanduser('~/read_token.txt')
+    token_path = os.path.expanduser('~/experiments/local_llms/read_token.txt')
     try:
         with open(token_path, 'r') as f:
             hf_token = f.read().strip()
@@ -28,7 +28,7 @@ def main():
         print(f"Token file not found at {token_path}. Please check the path.")
         exit(1)
 
-    base_model_name = "meta-llama/Llama-2-8b-hf"
+    base_model_name = "tiiuae/falcon-7b-instruct"  # a popular open model
     adapter_name = "JosineyJr/generate-conventional-commit-messages"
 
     print("Loading base model...")
@@ -36,9 +36,10 @@ def main():
         base_model_name,
         torch_dtype=torch.float16,
         device_map="auto",
-        use_auth_token=hf_token,
+        token=hf_token,  # <-- updated here
     )
-    tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_auth_token=hf_token)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name, token=hf_token)
+
 
     print("Loading adapter weights...")
     model = PeftModel.from_pretrained(
