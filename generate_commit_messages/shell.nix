@@ -38,3 +38,20 @@ pkgs.mkShell {
 
 # then confirm:
 #python -c "import torch, transformers; print('✅ Ready to use torch & transformers!')"
+
+# # Alternatively, if you want everything managed by Nix (no venv, no pip install):
+
+# { pkgs ? import <nixpkgs> {} }:
+
+# pkgs.mkShell {
+#   name = "commit-gen-env";
+
+#   buildInputs = [
+#     pkgs.python311
+#     pkgs.python311Packages.pytorch
+#     pkgs.python311Packages.transformers
+#     pkgs.python311Packages.huggingface-hub
+#     pkgs.git
+#   ];
+# }
+
