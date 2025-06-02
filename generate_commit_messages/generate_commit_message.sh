@@ -10,9 +10,16 @@ if [ ! -f "$PY_SCRIPT" ]; then
   exit 1
 fi
 
-if [ -n "$1" ]; then
-  cat "$1" | python3 "$PY_SCRIPT"
-else
-  echo "Paste your git diff or error message (Ctrl+D to finish):"
-  cat | python3 "$PY_SCRIPT"
+# Get git diff (unstaged or staged)
+diff_output=$(git diff)
+if [[ -z "$diff_output" ]]; then
+  diff_output=$(git diff --cached)
 fi
+
+if [[ -z "$diff_output" ]]; then
+  echo "No changes detected in git diff (unstaged or staged). Please provide input manually:"
+  echo "Press Ctrl+D when done."
+  diff_output=$(cat)  # read from stdin
+fi
+# Pass the diff or input to the python script via stdin
+echo "$diff_output" | python3 "$PY_SCRIPT"
