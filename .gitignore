@@ -1,4 +1,30 @@
+# Ignore personal or secret files
 ignore.txt
 read_token.txt
+
+# Ignore Python virtual environments (any level)
 **/venv/
 **/.venv/
+
+# Ignore large model files
+*.safetensors
+*.pt
+*.bin
+*.ckpt
+*.onnx
+*.h5
+
+# Ignore downloaded or generated model folders
+generate_commit_messages/suggested_models_for_commit_messages/
+generate_commit_messages/models_for_commit_messages/
+
+# Ignore caches and logs
+*.log
+*.tmp
+*.cache/
+__pycache__/
+*.py[cod]
+
+# Ignore OS/system files
+.DS_Store
+Thumbs.db
