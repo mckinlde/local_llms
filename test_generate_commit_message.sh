@@ -5,15 +5,16 @@ ROOT_DIR=~/experiments/local_llms
 GEN_SCRIPT="$ROOT_DIR/generate_commit_messages/generate_commit_message.sh"
 
 # Check llama.cpp binary
-if [ -f "$REPO_ROOT/llama.cpp/build/bin/llama-cli" ]; then
-    LLM_BINARY="$REPO_ROOT/llama.cpp/build/bin/llama-cli"
-elif [ -f "$REPO_ROOT/llama.cpp/build/bin/main" ]; then
-    LLM_BINARY="$REPO_ROOT/llama.cpp/build/bin/main"
+if [ -f "$ROOT_DIR/llama.cpp/build/bin/llama-cli" ]; then
+    echo "✅ Found llama-cli"
+    LLM_BINARY="$ROOT_DIR/llama.cpp/build/bin/llama-cli"
+elif [ -f "$ROOT_DIR/llama.cpp/build/bin/main" ]; then
+    echo "✅ Found main"
+    LLM_BINARY="$ROOT_DIR/llama.cpp/build/bin/main"
 else
     echo "❌ llama.cpp binary not found. Please run manual_make.sh first."
     exit 1
 fi
-
 
 # Check model file
 MODEL_FILE="$ROOT_DIR/models/commit-message-7b-v1.0-q4.gguf"
