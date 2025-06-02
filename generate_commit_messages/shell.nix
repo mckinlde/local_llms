@@ -1,5 +1,4 @@
 # shell.nix
-# This sets up a minimal environment using python310, transformers, and torch:
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
@@ -7,11 +6,12 @@ pkgs.mkShell {
 
   buildInputs = [
     pkgs.python310
-    pkgs.python310Packages.pip
+    pkgs.python310Packages.virtualenv
   ];
 
   shellHook = ''
-    echo "Setting up virtual environment..."
+    echo "🐍 Setting up Python virtual environment..."
+
     if [ ! -d .venv ]; then
       python3 -m venv .venv
       . .venv/bin/activate
@@ -21,6 +21,6 @@ pkgs.mkShell {
       . .venv/bin/activate
     fi
 
-    echo "Virtual environment activated."
+    echo "✅ Virtual environment activated."
   '';
 }
