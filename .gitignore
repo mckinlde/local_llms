@@ -1,6 +1,7 @@
 # Ignore personal or secret files
 ignore.txt
 read_token.txt
+rw-token.txt
 
 # Ignore Python virtual environments (any level)
 **/venv/
