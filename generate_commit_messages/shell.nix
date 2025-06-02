@@ -28,6 +28,7 @@ pkgs.mkShell {
       . .venv/bin/activate
       pip install --upgrade pip
       pip install torch transformers
+      pip install peft
     else
       . .venv/bin/activate
     fi
