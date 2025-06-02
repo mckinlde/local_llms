@@ -1,4 +1,4 @@
-Great — you're choosing **Option B: Fully local, offline inference using `llama.cpp`** to run the `JosineyJr/generate-conventional-commit-messages` model, which is in **GGUF format** and meant to be run via `llama.cpp`.
+Great — you're choosing **Option B: Fully local, offline inference using `llama.cpp`** to run the `JosineyJr/generate-conventional-commit-messages` model, IS NOT in **GGUF format** and meant to be run via `llama.cpp`.
 
 Let's wire it up end-to-end.
 

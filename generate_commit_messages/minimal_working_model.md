@@ -257,3 +257,145 @@ fi
 ---
 
 If you want, I can help you prepare a nix-shell environment with Python + transformers, or help refactor your entire pipeline to this new setup. Just ask!
+
+The error:
+
+```
+ValueError: Unrecognized model in JosineyJr/generate-conventional-commit-messages. Should have a `model_type` key in its config.json, or contain one of the following strings in its name: ...
+```
+
+means that the `transformers` library’s `AutoModelForSeq2SeqLM.from_pretrained()` can't automatically identify the model architecture from the repo metadata/configuration.
+
+---
+
+### Why this happens
+
+* The model `JosineyJr/generate-conventional-commit-messages` is an **adapter** or fine-tuned model based on **Meta’s LLaMA 2 8B**, but **it is not a full transformer model repo compatible with the vanilla `transformers` API** for direct loading.
+* It lacks a proper `config.json` that defines a recognized `model_type` for `transformers` to auto-detect how to instantiate it.
+* It probably relies on **adapter-style fine-tuning** or **PEFT** (parameter-efficient fine-tuning), or a custom loading procedure.
+
+---
+
+### How to fix / properly load this model
+
+You have two main paths:
+
+---
+
+## Option 1: Load the base model + apply the adapter weights manually (PEFT style)
+
+This repo likely requires you to:
+
+1. Download and load the **base LLaMA 2 8B** model weights (which you must have or can access).
+
+2. Load the **adapter weights** (`adapter_model.safetensors`) as a PEFT adapter on top of the base model.
+
+3. Use the [PEFT library](https://github.com/huggingface/peft) or a custom adapter loading routine to merge/inject the adapter weights.
+
+This is *not* as simple as calling `AutoModelForSeq2SeqLM.from_pretrained` on the adapter repo directly.
+
+---
+
+## Option 2: Use `transformers` + `peft` + `safetensors` and custom code
+
+You can do the following in Python:
+
+```python
+from transformers import AutoTokenizer, LlamaForCausalLM
+from peft import PeftModel
+
+# Load base LLaMA 2 8B (you need to have access to this model locally or via HF)
+base_model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-8b-hf", device_map="auto", torch_dtype=torch.float16)
+
+# Load tokenizer (usually the base model tokenizer)
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-8b-hf")
+
+# Load adapter weights on top of the base model
+model = PeftModel.from_pretrained(base_model, "JosineyJr/generate-conventional-commit-messages")
+
+# Example input and generate
+inputs = tokenizer("Refactor user authentication module", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_new_tokens=64)
+commit_message = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+print(commit_message)
+```
+
+---
+
+### Requirements:
+
+* You **must have access to the base model** `"meta-llama/Llama-2-8b-hf"` or a compatible LLaMA 2 8B Hugging Face checkpoint.
+
+* Install PEFT library:
+
+```bash
+pip install peft
+```
+
+* Make sure you have `transformers`, `torch`, and `safetensors` installed.
+
+---
+
+### Why?
+
+* This repo contains **only adapter weights** (`adapter_model.safetensors`), which are *not* standalone models.
+* `transformers` cannot instantiate them alone without the base model.
+* PEFT loads adapters as delta weights on top of the base model.
+
+---
+
+## Alternative
+
+If you **do not have the base LLaMA 2 8B model**, you cannot load this adapter model.
+
+---
+
+### TL;DR: You need to
+
+1. Download base LLaMA 2 8B model from HF (`meta-llama/Llama-2-8b-hf`) — this requires access.
+
+2. Use `transformers` + `peft` to load base + adapter (JosineyJr repo).
+
+3. Then generate commit messages.
+
+---
+
+### I can help you set this up if you have the base model locally or access on HF.
+
+---
+
+### Optional: For your current environment, here’s a sketch to update your script:
+
+```python
+import torch
+from transformers import AutoTokenizer, LlamaForCausalLM
+from peft import PeftModel
+
+def main():
+    base_model_name = "meta-llama/Llama-2-8b-hf"
+    adapter_name = "JosineyJr/generate-conventional-commit-messages"
+
+    print("Loading base model...")
+    base_model = LlamaForCausalLM.from_pretrained(base_model_name, torch_dtype=torch.float16, device_map="auto")
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+
+    print("Loading adapter weights...")
+    model = PeftModel.from_pretrained(base_model, adapter_name)
+    model.eval()
+
+    input_text = input("Paste your git diff or message: ")
+
+    inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+    outputs = model.generate(**inputs, max_new_tokens=64, temperature=0.7)
+    commit_message = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    print("\nGenerated Commit Message:\n", commit_message)
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+If you want, I can help you with the full environment setup or advise on how to obtain the base model. Just let me know!
