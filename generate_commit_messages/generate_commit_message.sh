@@ -21,17 +21,38 @@ fi
 # Generate Python script dynamically
 PYTHON_SCRIPT="$TMP_DIR/run_model.py"
 cat > "$PYTHON_SCRIPT" <<EOF
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import pipeline
 
-tokenizer = AutoTokenizer.from_pretrained("JosineyJr/generate-conventional-commit-messages")
-model = AutoModelForSeq2SeqLM.from_pretrained("JosineyJr/generate-conventional-commit-messages")
+generator = pipeline("text-generation", model="./generate-conventional-commit-messages")
 
-input_text = """$INPUT_TEXT"""
-inputs = tokenizer.encode(input_text, return_tensors="pt", truncation=True)
-outputs = model.generate(inputs, max_length=32)
+diff = """
+diff --git a/index.js b/index.js
+index e69de29..4b825dc 100644
+--- a/index.js
++++ b/index.js
+@@ -0,0 +1,2 @@
++console.log("Hello world!");
+"""
 
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+prompt = f"<commit_message>\n{diff}\n"
+
+output = generator(prompt, max_new_tokens=64)[0]["generated_text"]
+print(output)
 EOF
 
 # Run the script
 python "$PYTHON_SCRIPT"
+
+### Old Python Script:
+# cat > "$PYTHON_SCRIPT" <<EOF
+# from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+# tokenizer = AutoTokenizer.from_pretrained("JosineyJr/generate-conventional-commit-messages")
+# model = AutoModelForSeq2SeqLM.from_pretrained("JosineyJr/generate-conventional-commit-messages")
+
+# input_text = """$INPUT_TEXT"""
+# inputs = tokenizer.encode(input_text, return_tensors="pt", truncation=True)
+# outputs = model.generate(inputs, max_length=32)
+
+# print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+# EOF
