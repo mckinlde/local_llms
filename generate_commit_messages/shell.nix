@@ -24,3 +24,6 @@ pkgs.mkShell {
     echo "✅ Virtual environment activated."
   '';
 }
+
+# then confirm:
+#python -c "import torch, transformers; print('✅ Ready to use torch & transformers!')"
