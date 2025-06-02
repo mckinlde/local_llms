@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
-# Make sure huggingface_hub is installed
-pip install huggingface_hub || exit 1
+# Create models directory if it doesn't exist
+mkdir -p ~/experiments/local_llms/models
+cd ~/experiments/local_llms/
+[ -d models ] || mkdir models
+cd models
 
-# Download the model snapshot from HuggingFace
-python3 -c "
-from huggingface_hub import snapshot_download
-snapshot_download(repo_id='JosineyJr/generate-conventional-commit-messages', local_dir='models_for_commit_messages')
-"
+# Read Hugging Face token
+HUGGINGFACE_TOKEN=$(<~/experiments/local_llms/read_token.txt)
+
+# Download the GGUF commit message model
+MODEL_URL="https://huggingface.co/JosineyJr/generate-conventional-commit-messages/resolve/main/commit-message-7b-v1.0-q4.gguf"
+wget --header="Authorization: Bearer $HUGGINGFACE_TOKEN" "$MODEL_URL" -O commit-message-7b-v1.0-q4.gguf

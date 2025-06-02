@@ -15,8 +15,7 @@ read_token.txt
 *.h5
 
 # Ignore downloaded or generated model folders
-generate_commit_messages/suggested_models_for_commit_messages/
-generate_commit_messages/models_for_commit_messages/
+models/
 
 # Ignore caches and logs
 *.log
