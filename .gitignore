@@ -1,2 +1,4 @@
 ignore.txt
 read_token.txt
+**/venv/
+**/.venv/
