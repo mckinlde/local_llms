@@ -2,7 +2,8 @@
 set -e
 
 # Path setup
-LLAMA_BIN=~/experiments/local_llms/llama.cpp/build/bin/main
+LLAMA_BIN=~/experiments/local_llms/llama.cpp/build/bin/llama-cli
+
 MODEL=~/experiments/local_llms/models/commit-message-7b-v1.0-q4.gguf
 
 if [ ! -f "$LLAMA_BIN" ]; then
