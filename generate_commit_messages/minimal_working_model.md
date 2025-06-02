@@ -152,3 +152,108 @@ Would you prefer to:
 **B. Integrate this with llama.cpp** and run a fully local quantized `.gguf` model (more complex, but fully offline + local inference)
 
 Let me know — I can guide either direction.
+
+
+Got it! You want to switch your setup from llama.cpp using a raw quantized GGUF file to leveraging the fine-tuned **CommitWizard** model hosted at Hugging Face under `JosineyJr/generate-conventional-commit-messages`—which is a transformer model (based on LLaMA 2 8B) that’s fine-tuned for commit message generation and is meant to be used with the `transformers` Python library.
+
+---
+
+### What this means for your current architecture:
+
+* **No more llama.cpp binary or GGUF model file.**
+  Instead, you’ll run a Python script that loads the Hugging Face model with `transformers`.
+
+* Your input (git diff or commit message summary) will be passed to the tokenizer, then the model will generate a commit message text output.
+
+* This requires Python and `transformers` + `torch` installed (possibly `accelerate` too, for optimized loading).
+
+---
+
+### Here’s a minimal Python integration example based on your context:
+
+```python
+#!/usr/bin/env python3
+import sys
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+def main():
+    # Load the model and tokenizer once
+    tokenizer = AutoTokenizer.from_pretrained("JosineyJr/generate-conventional-commit-messages")
+    model = AutoModelForSeq2SeqLM.from_pretrained("JosineyJr/generate-conventional-commit-messages")
+
+    # Read input from stdin (your git diff or description)
+    input_text = sys.stdin.read().strip()
+    if not input_text:
+        print("❌ No input detected. Please pipe a git diff or message into this script.", file=sys.stderr)
+        sys.exit(1)
+
+    # Tokenize and generate
+    inputs = tokenizer(input_text, return_tensors="pt")
+    outputs = model.generate(**inputs, max_new_tokens=64, temperature=0.7, repetition_penalty=1.2)
+    
+    # Decode output tokens to string
+    commit_message = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    print(commit_message)
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+### How to incorporate this:
+
+1. **Install dependencies (preferably in a virtualenv or nix-shell):**
+
+```bash
+pip install transformers torch
+```
+
+2. **Replace your current `generate_commit_message.sh` with a wrapper that calls this Python script**, e.g., `generate_commit_message.py`.
+
+3. **Call it like this in your shell script or testing harness:**
+
+```bash
+echo "$SAMPLE_DIFF" | python3 /path/to/generate_commit_message.py
+```
+
+---
+
+### Optional: Example of a minimal updated `generate_commit_message.sh` that calls Python:
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+ROOT_DIR=~/experiments/local_llms
+
+PY_SCRIPT="$ROOT_DIR/generate_commit_messages/generate_commit_message.py"
+
+if [ ! -f "$PY_SCRIPT" ]; then
+  echo "❌ Python commit message generation script not found at $PY_SCRIPT"
+  exit 1
+fi
+
+if [ -n "$1" ]; then
+  cat "$1" | python3 "$PY_SCRIPT"
+else
+  echo "Paste your git diff or error message (Ctrl+D to finish):"
+  cat | python3 "$PY_SCRIPT"
+fi
+```
+
+---
+
+### Summary
+
+| Before (llama.cpp + GGUF)                             | After (transformers + HF repo)                                          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------- |
+| Native llama.cpp binary + quantized model file (GGUF) | Python `transformers` & `torch` loading fine-tuned model from HF        |
+| Model file downloaded manually                        | Model downloaded automatically by `transformers` from Hugging Face      |
+| Limited to llama.cpp CLI interface                    | Full access to huggingface tokenizer and model with flexible Python API |
+| Input: Prompt string to llama.cpp                     | Input: Text fed into tokenizer, output decoded to commit message        |
+
+---
+
+If you want, I can help you prepare a nix-shell environment with Python + transformers, or help refactor your entire pipeline to this new setup. Just ask!
