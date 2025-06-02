@@ -1,10 +1,8 @@
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
 import sys
 import os
 import subprocess
-from pathlib import Path
-import torch
-from transformers import AutoTokenizer, LlamaForCausalLM
-from peft import PeftModel
 
 def get_git_diff():
     try:
@@ -28,35 +26,31 @@ def main():
         print(f"Token file not found at {token_path}. Please check the path.")
         exit(1)
 
-    base_model_name = "tiiuae/falcon-7b-instruct"  # a popular open model
-    adapter_name = "JosineyJr/generate-conventional-commit-messages"
+    base_model_name = "tiiuae/falcon-7b-instruct"
 
-    print("Loading base model...")
-    base_model = LlamaForCausalLM.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name, token=hf_token)
+    model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         torch_dtype=torch.float16,
         device_map="auto",
-        token=hf_token,  # <-- updated here
-    )
-    tokenizer = AutoTokenizer.from_pretrained(base_model_name, token=hf_token)
-
-
-    print("Loading adapter weights...")
-    model = PeftModel.from_pretrained(
-        base_model,
-        adapter_name,
-        use_auth_token=hf_token,
+        token=hf_token,
     )
     model.eval()
 
-    print("Reading input from stdin...")
-    diff_text = sys.stdin.read().strip()
-    if not diff_text: 
-        # should be unreachable
+    print("Reading git diff...")
+    diff_text = get_git_diff()
+    if not diff_text:
         print("Please provide input manually:")
         diff_text = input("Paste your git diff or message: ")
 
-    inputs = tokenizer(diff_text, return_tensors="pt").to(model.device)
+    # Prompt engineering
+    prompt = (
+        "Generate a Conventional Commit message summarizing this git diff:\n"
+        + diff_text +
+        "\nCommit message:"
+    )
+
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     outputs = model.generate(**inputs, max_new_tokens=64, temperature=0.7)
     commit_message = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
