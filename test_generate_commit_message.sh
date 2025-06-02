@@ -1,43 +1,44 @@
 #!/usr/bin/env bash
 set -e
+set -o pipefail  # ensure errors inside pipes are caught
 
-ROOT_DIR=~/experiments/local_llms
-GEN_SCRIPT="$ROOT_DIR/generate_commit_messages/generate_commit_message.sh"
+# Path setup
+LLAMA_BIN=~/experiments/local_llms/llama.cpp/build/bin/llama-cli  # ✅ updated default to llama-cli
 
-# Check llama.cpp binary
-if [ -f "$ROOT_DIR/llama.cpp/build/bin/llama-cli" ]; then
-    echo "✅ Found llama-cli"
-    LLM_BINARY="$ROOT_DIR/llama.cpp/build/bin/llama-cli"
-elif [ -f "$ROOT_DIR/llama.cpp/build/bin/main" ]; then
-    echo "✅ Found main"
-    LLM_BINARY="$ROOT_DIR/llama.cpp/build/bin/main"
-else
-    echo "❌ llama.cpp binary not found. Please run manual_make.sh first."
-    exit 1
-fi
+MODEL=~/experiments/local_llms/models/commit-message-7b-v1.0-q4.gguf
 
-# Check model file
-MODEL_FILE="$ROOT_DIR/models/commit-message-7b-v1.0-q4.gguf"
-if [ ! -f "$MODEL_FILE" ]; then
-  echo "❌ Model file not found at $MODEL_FILE. Please run download_commit_model.sh first."
+if [ ! -f "$LLAMA_BIN" ]; then
+  echo "❌ llama.cpp binary not found at $LLAMA_BIN. Run manual_make.sh first."
   exit 1
 fi
 
-# Minimal sample git diff input
-read -r -d '' SAMPLE_DIFF <<'EOF'
-diff --git a/example.txt b/example.txt
-index e69de29..d95f3ad 100644
---- a/example.txt
-+++ b/example.txt
-@@ -0,0 +1,3 @@
-+Initial commit of example.txt
-+Added sample text content.
-+Fixed typo in README.
-EOF
+if [ ! -f "$MODEL" ]; then
+  echo "❌ Model file not found at $MODEL. Run download_commit_model.sh first."
+  exit 1
+fi
 
-echo "🧪 Running minimal commit message generation test..."
+# Get input (file or stdin)
+if [ -n "$1" ]; then
+  INPUT_TEXT=$(<"$1")
+else
+  echo "📥 Paste your git diff or error message (Ctrl+D to finish):"
+  INPUT_TEXT=$(cat)
+fi
 
-# Pass sample diff to generate_commit_message.sh via stdin
-echo "$SAMPLE_DIFF" | bash "$GEN_SCRIPT"
+# Prompt template
+PROMPT="<commit_message>\n$INPUT_TEXT\n"
 
-echo "✅ Test completed."
+# Call llama.cpp
+echo "🧠 Generating commit message..."
+"$LLAMA_BIN" \
+  --model "$MODEL" \
+  --n-predict 64 \
+  --prompt "$PROMPT" \
+  --color \
+  --temp 0.7 \
+  --repeat_penalty 1.2 || {
+    echo "❌ llama-cli failed to run."
+    exit 1
+  }
+
+echo -e "\n✅ Done."
