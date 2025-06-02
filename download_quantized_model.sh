@@ -8,7 +8,9 @@ cd models
 
 # Download a small GGUF model (e.g., TinyLlama 1.1B)
 # Read the token from read_token.txt (make sure read_token.txt contains only the token)
-HUGGINGFACE_TOKEN=$(<read_token.txt)
+HUGGINGFACE_TOKEN=$(<~/experiments/local_llms/read_token.txt)
+echo "HUGGINGFACE_TOKEN: '$HUGGINGFACE_TOKEN'"
+
 
 MODEL_URL="https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-GGUF/resolve/main/tinyllama-1.1b-chat.q4_K_M.gguf"
 
