@@ -3,6 +3,23 @@ from transformers import AutoTokenizer, LlamaForCausalLM
 from peft import PeftModel
 import torch
 import subprocess
+import psutil
+import threading
+import time
+
+# call monitor_resources() at the beginning of the script to see how we're doing
+def monitor_resources(interval=5):
+    def log():
+        while True:
+            mem = psutil.virtual_memory()
+            cpu = psutil.cpu_percent()
+            print(f"[Resource Monitor] CPU: {cpu}% | RAM: {mem.used / (1024**3):.2f}GB / {mem.total / (1024**3):.2f}GB")
+            time.sleep(interval)
+    thread = threading.Thread(target=log, daemon=True)
+    thread.start()
+
+print("Start resource monitor...")
+monitor_resources()
 
 # Paths
 base_model_path = os.path.expanduser("~/git_lfs_models/Meta-Llama-Guard-2-8B")
