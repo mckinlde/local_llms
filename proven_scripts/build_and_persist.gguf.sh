@@ -7,8 +7,8 @@ set -euo pipefail
 
 # Copies the .gguf to a destination folder you choose.
 
-MODEL_DIR="$HOME/experiments/local_llms/merged-model"
-PERSISTENT_GGUF="$HOME/experiments/local_llms/persistent_gguf/merged_model.gguf"
+MODEL_DIR="$HOME/experiments/local_llms/merged-model" # /merged-model contains safetensors files and .json files
+PERSISTENT_GGUF="$HOME/experiments/local_llms/test_portability/merged_model.gguf" # destination for .gguf
 
 mkdir -p "$MODEL_DIR"
 mkdir -p "$(dirname "$PERSISTENT_GGUF")"
