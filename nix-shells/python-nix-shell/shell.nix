@@ -1,8 +1,8 @@
-# shell.nix
+# /home/dmei/experiments/local_llms/nix-shells/python-nix-shell/shell.nix
 { pkgs ? import <nixpkgs> {} }:
-
+# Assumes (and uses requirements.txt from) you have cloned llama.cpp from https://github.com/ggml-org/llama.cpp.git
 pkgs.mkShell {
-  name = "commit-gen-env";
+  name = "llm-conversion-env";
 
   buildInputs = [
     pkgs.python311
@@ -12,12 +12,9 @@ pkgs.mkShell {
     pkgs.git
   ];
 
-
   env.LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ 
-  # import libraries that your python packages depend on
-  # these are the most common
-   pkgs.stdenv.cc.cc.lib
-   pkgs.libz
+    pkgs.stdenv.cc.cc.lib
+    pkgs.libz
   ];
 
   shellHook = ''
@@ -27,8 +24,7 @@ pkgs.mkShell {
       python3 -m venv .venv
       . .venv/bin/activate
       pip install --upgrade pip
-      pip install torch transformers
-      pip install peft
+      pip install -r /home/dmei/experiments/local_llms/llama.cpp/requirements.txt
     else
       . .venv/bin/activate
     fi
@@ -36,23 +32,3 @@ pkgs.mkShell {
     echo "✅ Virtual environment activated."
   '';
 }
-
-# then confirm:
-#python -c "import torch, transformers; print('✅ Ready to use torch & transformers!')"
-
-# # Alternatively, if you want everything managed by Nix (no venv, no pip install):
-
-# { pkgs ? import <nixpkgs> {} }:
-
-# pkgs.mkShell {
-#   name = "commit-gen-env";
-
-#   buildInputs = [
-#     pkgs.python311
-#     pkgs.python311Packages.pytorch
-#     pkgs.python311Packages.transformers
-#     pkgs.python311Packages.huggingface-hub
-#     pkgs.git
-#   ];
-# }
-
