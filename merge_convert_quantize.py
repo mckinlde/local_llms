@@ -79,6 +79,39 @@ def merge_adapter():
     gc.collect()
     print("Adapter merged and saved successfully.")
 
+def adapted_merge_adapter(): # adapted to handle adapter/model mismatch more gracefully and improve memory handling:
+    print("Loading base model for merge...")
+    model = LlamaForCausalLM.from_pretrained(
+        base_model_path,
+        torch_dtype=torch.float32,
+        low_cpu_mem_usage=True,
+        device_map="auto",
+        offload_folder="./offload",
+    )
+
+    print("Loading PEFT adapter with strict=False...")
+    model = PeftModel.from_pretrained(model, adapter_path, strict=False)
+
+    print("Cleaning up memory before merging...")
+    import gc
+    gc.collect()
+    try:
+        import torch
+        torch.cuda.empty_cache()
+    except ImportError:
+        pass  # torch.cuda might not be available if running CPU-only
+
+    print("Merging adapter weights into the base model...")
+    model = merge_peft_adapters(model)
+
+    print(f"Saving merged model to {merged_model_dir}...")
+    model.save_pretrained(merged_model_dir)
+
+    del model
+    gc.collect()
+    print("Adapter merged and saved successfully.")
+
+
 # === Convert to GGUF ===
 
 def convert_to_gguf():
@@ -116,7 +149,7 @@ if __name__ == "__main__":
 
     start_time = time.time()
     try:
-        merge_adapter()
+        adapted_merge_adapter()
         convert_to_gguf()
         quantize_gguf()
     except Exception as e:
