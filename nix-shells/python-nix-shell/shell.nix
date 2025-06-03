@@ -9,6 +9,7 @@ pkgs.mkShell {
     pkgs.python311Packages.pip
     pkgs.python311Packages.virtualenv
     pkgs.python311Packages.huggingface-hub
+    pkgs.python311Packages.sentencepiece  # <-- required for llama.cpp/convert_hf_to_gguf.py; not currently in requirements.txt
     pkgs.git
   ];
 
