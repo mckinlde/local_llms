@@ -17,6 +17,7 @@ rw-token.txt
 
 # Ignore downloaded or generated model folders
 models/
+merged-model/
 
 # Ignore caches and logs
 *.log

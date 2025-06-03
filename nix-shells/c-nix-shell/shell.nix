@@ -14,7 +14,8 @@ pkgs.mkShell {
 
   shellHook = ''
     echo "✅ Entered llama.cpp dev shell"
-    echo "💡 Run 'make -j' to build the project"
+    # Makefile:2: *** The Makefile build is deprecated. Use the CMake build instead. For more details, see https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md.  Stop.
+    echo "💡 Run 'proven_scripts/build_llama_with_cmake.sh' to build llama.cpp"
     echo "🧹 Run 'rm -rf /home/dmei/experiments/local_llms/llama.cpp/build' to clean out an old build"
   '';
 }
