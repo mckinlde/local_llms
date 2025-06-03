@@ -238,7 +238,7 @@ monitor_ram() {
   # Final print with newline, keep latest stats visible
   printf "\r🧠 RAM Usage - Current: %4d MB | Peak: %4d MB | Average: %4d MB\n" "$mem_mb" "$peak_mem" "$avg_mem"
   tput cnorm  # Restore cursor
-
+}
 # ./old_gcm_to_merge.sh: line 265: $1: unbound variable
 # ./old_gcm_to_merge.sh: line 265: Peak:: command not found
 # ./old_gcm_to_merge.sh: line 265: mem_mb: unbound variable
