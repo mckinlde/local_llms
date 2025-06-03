@@ -23,4 +23,13 @@ nix-shell "$HOME/experiments/local_llms/nix-shells/python-nix-shell/shell.nix" -
 
   echo "🕵️ verify existence"
   ls -lh /home/dmei/experiments/local_llms/merged-model/merged_model.gguf
+
+  echo "PWD inside nix-shell: $(pwd)"
+  echo "Model output dir exists? $(ls -ld /home/dmei/experiments/local_llms/merged-model)"
 '
+
+# You could also try writing to your home directory directly as a test:
+
+# --outfile /home/dmei/merged_model.gguf
+
+# Then check if /home/dmei/merged_model.gguf exists after you exit nix-shell.
