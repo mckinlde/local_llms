@@ -93,13 +93,11 @@ def adapted_merge_adapter(): # adapted to handle adapter/model mismatch more gra
     model = PeftModel.from_pretrained(model, adapter_path, strict=False)
 
     print("Cleaning up memory before merging...")
-    import gc
     gc.collect()
     try:
-        import torch
         torch.cuda.empty_cache()
-    except ImportError:
-        pass  # torch.cuda might not be available if running CPU-only
+    except Exception:
+        pass  # Ignore if no GPU or CUDA not available
 
     print("Merging adapter weights into the base model...")
     model = merge_peft_adapters(model)
