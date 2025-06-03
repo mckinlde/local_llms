@@ -3,7 +3,10 @@
 set -euo pipefail
 
 # === Default Config ===
-CTX_SIZE=2048
+# Your model supports up to 8192 tokens (`n_ctx_train = 8192`). 
+# You can go higher than 2048 if your task benefits:
+CTX_SIZE=8192
+# It will increase memory usage but allow longer prompt + completion.
 DEBUG=false
 DRY_RUN=false
 PREFIX=""
@@ -36,9 +39,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# === Setup Variables ===
-LLAMA_CLI="llama-cli"
-MODEL_PATH="/path/to/your/model.gguf"
+# === Paths ===
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODEL_PATH="$SCRIPT_DIR/merged_model.gguf"
+LLAMA_CLI="$SCRIPT_DIR/llama-cli"
 
 # === Get Diff and Estimate Token Count ===
 DIFF=$(git diff --cached)
@@ -83,6 +87,8 @@ monitor_ram() {
 echo "🧠 Running model with ctx-size=${CTX_SIZE}..."
 
 # Start llama-cli in background
+# Try running with `--no-mmap` to force full model load into RAM
+# That should push RAM usage closer to 8–9 GB and reduce disk overhead.
 OUTPUT_FILE=$(mktemp)
 $LLAMA_CLI \
   -m "$MODEL_PATH" \
@@ -93,6 +99,7 @@ $LLAMA_CLI \
   --top-p 0.9 \
   --repeat-penalty 1.1 \
   --ctx-size "$CTX_SIZE" \
+  --no-mmap \
   > "$OUTPUT_FILE" 2>&1 &
 LLAMA_PID=$!
 
