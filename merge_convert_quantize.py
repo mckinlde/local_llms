@@ -58,13 +58,19 @@ def merge_adapter():
     #     low_cpu_mem_usage=True
     # )
     # We keep hitting the RAM ceiling, so let's try offloading to SSD
+    max_memory = {
+        "cpu": "26GiB",  # limit CPU RAM usage to 26GB, offload rest
+        "disk": "100GiB", # allow offloading large chunks to SSD
+    }
     # I still want to use full float32 for accuracy of finetuning given that I'm not running with a GPU
     model = LlamaForCausalLM.from_pretrained(
         base_model_path,
         torch_dtype=torch.float32,
         low_cpu_mem_usage=True,
-        device_map="auto",           # Auto-assign layers to CPU and disk offload
-        offload_folder="./offload",  # Local folder to offload weights to SSD
+        device_map="auto",
+        max_memory=max_memory,
+        offload_folder="./offload",
+        offload_state_dict=True,
     )
 
     print("Loading PEFT adapter...")
