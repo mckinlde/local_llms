@@ -3,7 +3,7 @@ set -e
 
 ROOT_DIR=~/experiments/local_llms
 
-PY_SCRIPT="$ROOT_DIR/generate_commit_messages/generate_commit_message.py"
+PY_SCRIPT="$ROOT_DIR/generate_commit_messages/generate-commit-message-llama-2-with-adapter.py"
 
 if [ ! -f "$PY_SCRIPT" ]; then
   echo "❌ Python commit message generation script not found at $PY_SCRIPT"
