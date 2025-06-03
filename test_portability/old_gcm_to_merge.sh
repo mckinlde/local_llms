@@ -36,7 +36,11 @@ CTX_SIZE=2048 # Total model context window in tokens (prompt + output).
 #     or crash if not handled well.
 # So you are correct that CTX_SIZE acts like a hard boundary, but it’s not a memory manager — it’s a token window limit.
 
-MMAP=--no-mmap # Loads model into RAM → faster inference on high-RAM systems like yours
+
+
+
+MLOCK=--mlock # force system to keep model in RAM rather than swapping or compressing
+              #                          (env: LLAMA_ARG_MLOCK)
 THREADS=4 # use `$ nproc` to see how many threads you have avaliable
 # my CPU has 8 (4 cores w/2 threads per core); don't set to max to avoid oversubscription causing contention
 
@@ -250,7 +254,7 @@ echo
 echo "🧠 Running model with ctx-size=${CTX_SIZE}..."
 
 # Start llama-cli in background
-# Try running with `--no-mmap` to force full model load into RAM
+# Try running with `--mlock` to force full model load into RAM
 # That should push RAM usage closer to 8–9 GB and reduce disk overhead.
 OUTPUT_FILE=$(mktemp)
 $LLAMA_CLI \
@@ -262,7 +266,7 @@ $LLAMA_CLI \
   --top-p 0.9 \
   --repeat-penalty 1.1 \
   --ctx-size "$CTX_SIZE" \
-  $MMAP \
+  $MLOCK \
   --threads $THREADS \
   > "$OUTPUT_FILE" 2>&1 &
 LLAMA_PID=$!
