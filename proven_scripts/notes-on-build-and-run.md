@@ -1042,3 +1042,129 @@ In any case, write a new version of generate_commit_message.sh, that uses the me
 - if commit message approved, pipe it to git commit -m directly and stage the commit
 - prompt the user to hit enter to push, or q to exit
 - if enter, git push; else q, unstage the commit
+
+
+=== chatGPT:
+Thanks for the clarification. Since your `llama-cli` binary works without `nix-shell`, we can make the entire `generate_commit_message.sh` script **pure Bash**, assuming you’ve already compiled and statically linked everything inside `test_portability/`.
+
+Here’s a fully rewritten version based on your current layout and requirements.
+
+---
+
+### ✅ `test_portability/generate_commit_message.sh`
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Paths relative to the script's own directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODEL_PATH="$SCRIPT_DIR/merged_model.gguf"
+LLAMA_CLI="$SCRIPT_DIR/llama-cli"
+
+# === Check files exist ===
+if [[ ! -f "$MODEL_PATH" ]]; then
+  echo "❌ Model not found at: $MODEL_PATH"
+  exit 1
+fi
+
+if [[ ! -x "$LLAMA_CLI" ]]; then
+  echo "❌ llama-cli binary not found or not executable at: $LLAMA_CLI"
+  exit 1
+fi
+
+# === Collect git diff ===
+echo "🔍 Collecting git diff..."
+DIFF=$(git diff --cached || git diff)
+
+if [[ -z "$DIFF" ]]; then
+  echo "⚠️ No staged or working changes found. Exiting."
+  exit 1
+fi
+
+# === Build prompt and run model ===
+PROMPT="Generate a conventional commit message for the following git diff:\n\n$DIFF"
+
+echo "🧠 Running model..."
+COMMIT_MSG=$("$LLAMA_CLI" \
+  -m "$MODEL_PATH" \
+  -p "$PROMPT" \
+  -n 128 \
+  --temp 0.2 \
+  --top-k 40 \
+  --top-p 0.9 \
+  --repeat-penalty 1.1 \
+  --ctx-size 2048 \
+  --log-disable \
+  --silent-prompt)
+
+echo
+echo "📝 Suggested commit message:"
+echo "----------------------------------------"
+echo "$COMMIT_MSG"
+echo "----------------------------------------"
+echo
+
+# === Confirm commit ===
+read -rp "✅ Press ENTER to approve and commit, or q to quit: " confirm
+if [[ "$confirm" == "q" ]]; then
+  echo "❌ Commit canceled."
+  exit 0
+fi
+
+echo "✅ Committing..."
+git commit -m "$COMMIT_MSG"
+
+# === Confirm push ===
+echo
+read -rp "🚀 Press ENTER to push, or q to cancel and unstage: " push_confirm
+if [[ "$push_confirm" == "q" ]]; then
+  echo "🔁 Unstaging commit..."
+  git reset --soft HEAD~1
+  exit 0
+fi
+
+echo "📤 Pushing commit..."
+git push
+
+echo "✅ Done."
+```
+
+---
+
+### 🔧 Setup
+
+```bash
+chmod +x test_portability/generate_commit_message.sh
+```
+
+Then from your repo root:
+
+```bash
+./test_portability/generate_commit_message.sh
+```
+
+---
+
+### ✅ Summary of What It Does
+
+* Uses `llama-cli` and `merged_model.gguf` in the same folder as the script.
+* Collects `git diff --cached` (if no cache, falls back to `git diff`).
+* Passes the diff as a prompt to `llama-cli`.
+* Prints the suggested Conventional Commit message.
+* Waits for user approval to:
+
+  1. Run `git commit -m "$msg"`
+  2. Run `git push`
+* If push declined, the commit is soft-reset (unstaged but not lost).
+
+Let me know if you'd like:
+
+* A way to copy the message to clipboard (`xclip`, `pbcopy`, etc.)
+* Support for amending the last commit
+* Prompt prefix customization (e.g. “feat:”, “fix:”) before confirming
+
+=== Human:
+Those are good suggestions, the one I want is Prompt prefix customization (e.g. “feat:”, “fix:”) before confirming
+
+Also, I'm comfortable assuming this binary will only be run on systems equivalent to where it was built (NixOS, x86-64), but I want to include some safety checks that will prevent it from running on an incompatible system, and nofity the user of compatibility requirements.
