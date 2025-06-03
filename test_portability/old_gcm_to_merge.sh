@@ -24,12 +24,47 @@ fi
 
 # Model Settings
 MAX_CTX_SIZE=8192 # Your model supports up to 8192 tokens (`n_ctx_train = 8192`). # You can go higher than 2048 if your task benefits: It will increase memory usage but allow longer prompt + completion.
-CTX_SIZE=2048 # Default to a small window size, can increase it if diff is large
+CTX_SIZE=2048 # Total model context window in tokens (prompt + output).
+# If prompt + output > CTX_SIZE, llama.cpp may truncate or fail.
+# Default to small model, and increase up to max based on size of Diff in script
+
+# CIX_SIZE: the total number of tokens the model can attend to, including both:
+#     the prompt (input tokens)
+#     the generated output (up to -n tokens)
+# It’s a logical constraint, not a physical memory limiter. If the total token count (prompt + output) exceeds CTX_SIZE, the model:
+#     may truncate your prompt (often from the start),
+#     or crash if not handled well.
+# So you are correct that CTX_SIZE acts like a hard boundary, but it’s not a memory manager — it’s a token window limit.
+
+MMAP=--no-mmap # Loads model into RAM → faster inference on high-RAM systems like yours
+
+OUTPUT_BUFFER=128 # Max number of tokens to generate in the output, May crash if prompt is too long
+# You use this to set:
+# -n $OUTPUT_BUFFER
+# This controls the maximum number of tokens the model should generate as output.
+# That output must fit within CTX_SIZE, along with the prompt.
+# | Variable        | Role                                       | Used In                    |
+# | --------------- | ------------------------------------------ | -------------------------- |
+# | `OUTPUT_BUFFER` | How many tokens the model generates (`-n`) | llama-cli runtime argument |
+# | `CTX_BUFFER`    | Prompt safety margin (tokens reserved)     | Prompt truncation logic    |
+# So while both deal with "output capacity", they do it at different layers:
+#     OUTPUT_BUFFER is the instruction to the model.
+#     CTX_BUFFER is the input-side safety mechanism to avoid crashing the model due to overflow.
 
 # Script Settings
 DEBUG=false # Toggle for prompt metrics, raw model output, ctx_size changes
 VERBOSE_DEBUG=false  # Toggle for every command, full prompt
-DRY_RUN=false
+DRY_RUN=false # True to generate a message and exit without asking to commit or push, saves tens of keystrokes in testing.  tens of keystrokes!
+
+CTX_BUFFER=256 # How many tokens to subtract from prompt to be sure prompt+output!>CTX_SIZE; this would be better measured with a llama tokenizer, and crashes LLAMA if prompt>CTX_SIZE
+# You use this to calculate:
+# MAX_TOKENS=$(( CTX_SIZE - $CTX_BUFFER ))
+# This is a safety margin to ensure that the prompt does not eat into space reserved for the output.
+# You're effectively saying:
+#     “I’ll leave $CTX_BUFFER tokens of headroom for the output when feeding in the prompt.”
+
+# 💡 Best practice:
+# Set CTX_BUFFER ≈ OUTPUT_BUFFER (with a little extra margin). You’ve got:
 
 # === Parse Flags ===
 while [[ $# -gt 0 ]]; do
@@ -102,9 +137,12 @@ fi
 # === Estimate Token Count ===
 EST_TOKEN_COUNT=$(echo "$DIFF" | wc -w)
 $DEBUG && echo "📏 Estimated token count: $EST_TOKEN_COUNT" >&2
+# If you're ever unsure of the true token count, consider using 
+# llama_tokenize (if available) to get real token counts instead 
+# of wc -w, which is a rough estimate.
 
 # Gradually increase CTX_SIZE if diff is too large
-while (( EST_TOKEN_COUNT > (CTX_SIZE - 128) )) && (( CTX_SIZE < MAX_CTX_SIZE )); do
+while (( EST_TOKEN_COUNT > (CTX_SIZE - CTX_BUFFER) )) && (( CTX_SIZE < MAX_CTX_SIZE )); do
   OLD_CTX_SIZE=$CTX_SIZE
   if (( CTX_SIZE * 2 <= MAX_CTX_SIZE )); then
     CTX_SIZE=$(( CTX_SIZE * 2 ))
@@ -115,7 +153,7 @@ while (( EST_TOKEN_COUNT > (CTX_SIZE - 128) )) && (( CTX_SIZE < MAX_CTX_SIZE ));
 done
 
 # Final token allowance
-MAX_TOKENS=$(( CTX_SIZE - 128))
+MAX_TOKENS=$(( CTX_SIZE - $CTX_BUFFER ))
 $DEBUG && echo "✅ Final CTX_SIZE: $CTX_SIZE | Max tokens allowed: $MAX_TOKENS" >&2
 
 # Truncate if still too large
@@ -174,11 +212,30 @@ fi
 # === Function to Monitor RAM ===
 monitor_ram() {
   local pid=$1
+  local count=0
+  local sum_mem=0
+  local peak_mem=0
+
+  tput civis  # Hide cursor
+  trap 'tput cnorm; echo; exit' INT TERM EXIT  # Restore cursor on exit & add newline
+
   while kill -0 "$pid" 2>/dev/null; do
-    mem=$(ps -o rss= -p "$pid")
-    echo "🧠 RAM Usage: $((mem / 1024)) MB" >&2
+    local rss_kb=$(ps -o rss= -p "$pid")
+    local mem_mb=$((rss_kb / 1024))
+
+    ((count++))
+    sum_mem=$((sum_mem + mem_mb))
+    ((mem_mb > peak_mem)) && peak_mem=$mem_mb
+    local avg_mem=$((sum_mem / count))
+
+    printf "\r🧠 RAM Usage - Current: %4d MB | Peak: %4d MB | Average: %4d MB" "$mem_mb" "$peak_mem" "$avg_mem"
+
     sleep 1
   done
+
+  # Final print with newline, keep latest stats visible
+  printf "\r🧠 RAM Usage - Current: %4d MB | Peak: %4d MB | Average: %4d MB\n" "$mem_mb" "$peak_mem" "$avg_mem"
+  tput cnorm  # Restore cursor
 }
 
 # === Run Model ===
@@ -192,13 +249,13 @@ OUTPUT_FILE=$(mktemp)
 $LLAMA_CLI \
   -m "$MODEL_PATH" \
   -p "$PROMPT" \
-  -n 128 \
+  -n $OUTPUT_BUFFER \
   --temp 0.2 \
   --top-k 40 \
   --top-p 0.9 \
   --repeat-penalty 1.1 \
   --ctx-size "$CTX_SIZE" \
-  --no-mmap \
+  $MMAP \
   > "$OUTPUT_FILE" 2>&1 &
 LLAMA_PID=$!
 
@@ -219,7 +276,7 @@ if $DEBUG; then
 fi
 
 # === Confirm and Commit ===
-echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG"
+echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG""
 if $DRY_RUN; then
   echo "Dry Run Mode, exiting..."
   exit 0
