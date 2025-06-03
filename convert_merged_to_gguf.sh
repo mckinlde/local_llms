@@ -10,10 +10,10 @@ echo "🔁 Entering C++ nix-shell to convert merged model to GGUF..."
   cmake .. && \
   cmake --build . -j && \
   cd .. && \
-  python3 /home/dmei/experiments/local_llms/llama.cpp/convert.py \
-    --outfile-dir /home/dmei/experiments/local_llms/converted-gguf \
-    --model-dir /home/dmei/experiments/local_llms/merged-model \
-    --vocab-type sentencepiece
+  /home/dmei/experiments/local_llms/llama.cpp/build/convert \
+  --outfile-dir /home/dmei/experiments/local_llms/converted-gguf \
+  --model-dir /home/dmei/experiments/local_llms/merged-model \
+  --vocab-type sentencepiece
 "
 
 echo "✅ GGUF model written to /home/dmei/experiments/local_llms/converted-gguf/"
