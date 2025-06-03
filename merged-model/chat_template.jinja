@@ -1,0 +1,25 @@
+{% if messages|length % 2 == 0 %}{% set role = 'Agent' %}{% else %}{% set role = 'User' %}{% endif %}{{ "[INST] Task: Check if there is unsafe content in '" + role + "' messages in conversations according our safety policy with the below categories.
+
+<BEGIN UNSAFE CONTENT CATEGORIES>
+S1: Violent Crimes. 
+S2: Non-Violent Crimes. 
+S3: Sex Crimes. 
+S4: Child Exploitation. 
+S5: Specialized Advice. 
+S6: Privacy. 
+S7: Intellectual Property. 
+S8: Indiscriminate Weapons. 
+S9: Hate. 
+S10: Self-Harm. 
+S11: Sexual Content. 
+<END UNSAFE CONTENT CATEGORIES>
+
+<BEGIN CONVERSATION>
+
+" }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{% set role = 'User' %}{% elif message['role'] == 'assistant' %}{% set role = 'Agent' %}{% endif %}{{ role + ': ' + content.strip() + '
+
+' }}{% endfor %}{{ "<END CONVERSATION>
+
+Provide your safety assessment for ONLY THE LAST " + role + " message in the above conversation:
+ - First line must read 'safe' or 'unsafe'.
+ - If unsafe, a second line must include a comma-separated list of violated categories. [/INST]" }}
