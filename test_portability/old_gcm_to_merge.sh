@@ -37,6 +37,8 @@ CTX_SIZE=2048 # Total model context window in tokens (prompt + output).
 # So you are correct that CTX_SIZE acts like a hard boundary, but it’s not a memory manager — it’s a token window limit.
 
 MMAP=--no-mmap # Loads model into RAM → faster inference on high-RAM systems like yours
+THREADS=4 # use `$ nproc` to see how many threads you have avaliable
+# my CPU has 8 (4 cores w/2 threads per core); don't set to max to avoid oversubscription causing contention
 
 OUTPUT_BUFFER=128 # Max number of tokens to generate in the output, May crash if prompt is too long
 # You use this to set:
@@ -236,7 +238,12 @@ monitor_ram() {
   # Final print with newline, keep latest stats visible
   printf "\r🧠 RAM Usage - Current: %4d MB | Peak: %4d MB | Average: %4d MB\n" "$mem_mb" "$peak_mem" "$avg_mem"
   tput cnorm  # Restore cursor
-}
+
+# ./old_gcm_to_merge.sh: line 265: $1: unbound variable
+# ./old_gcm_to_merge.sh: line 265: Peak:: command not found
+# ./old_gcm_to_merge.sh: line 265: mem_mb: unbound variable
+# ./old_gcm_to_merge.sh: line 271: Peak:: command not found
+# ./old_gcm_to_merge.sh: line 271: mem_mb: unbound variable
 
 # === Run Model ===
 echo
@@ -256,6 +263,7 @@ $LLAMA_CLI \
   --repeat-penalty 1.1 \
   --ctx-size "$CTX_SIZE" \
   $MMAP \
+  --threads $THREADS \
   > "$OUTPUT_FILE" 2>&1 &
 LLAMA_PID=$!
 
@@ -276,7 +284,7 @@ if $DEBUG; then
 fi
 
 # === Confirm and Commit ===
-echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG""
+echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG"
 if $DRY_RUN; then
   echo "Dry Run Mode, exiting..."
   exit 0
