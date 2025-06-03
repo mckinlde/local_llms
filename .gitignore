@@ -2,6 +2,7 @@
 ignore.txt
 read_token.txt
 rw-token.txt
+scratchpad.txt
 
 # Ignore Python virtual environments (any level)
 **/venv/
