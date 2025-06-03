@@ -2,7 +2,7 @@
 
 echo "🔁 Entering Python nix-shell to convert merged model to GGUF..."
 
-nix-shell ../nix-shells/python-nix-shell/shell.nix --run "
+nix-shell /home/dmei/experiments/local_llms/nix-shells/python-nix-shell/shell.nix --run "
   echo '🐍 Setting up Python virtual environment...';
   . .venv/bin/activate;
   echo '✅ Virtual environment activated.';
