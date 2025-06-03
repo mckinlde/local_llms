@@ -15,6 +15,6 @@ pkgs.mkShell {
   shellHook = ''
     echo "✅ Entered llama.cpp dev shell"
     echo "💡 Run 'make -j' to build the project"
-    echo "🧹 Run 'rm -rf /home/dmei/experiments/local_llms/llama.cpp/build' to clean out an old build
+    echo "🧹 Run 'rm -rf /home/dmei/experiments/local_llms/llama.cpp/build' to clean out an old build"
   '';
 }
