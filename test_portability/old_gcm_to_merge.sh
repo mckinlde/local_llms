@@ -193,35 +193,19 @@ done
 # Best Practice: Use a Here Document (Heredoc) with quoted delimiter
 # This is the most durable and safe way to pass raw code (like diffs or logs) into a variable or file in Bash:
 PROMPT=$(cat <<'EOF'
-You are writing a commit message. You will be shown a Git diff and a Commit type.  
-Generate a commit message corresponding to the Commit type that describes the changes made in the Git diff.
-Only output JSON structured like this:
-{
-  "commit_message": "your concise message here"
-}
-
-Example:
-Git diff:
-- def foo(): pass
-+ def foo(): print("bar")
-
-Commit type: feat
-{
-  "commit_message": "print output in foo()"
-}
-
----
-
-Now it's your turn.
-Respond ONLY with a JSON object on a single line. No commentary, no markdown. Format:
+You are writing a commit message. Your task is to analyze the Git diff and output only a one-line JSON object.
+DO NOT repeat the Git diff or prefix.
+DO NOT include commentary, Markdown, or formatting.
+Only return:
 {"commit_message": "your message here"}
 
-Git diff:
+BEGIN_DIFF
 EOF
 )
 
 PROMPT+=$'\n'"$DIFF"$'\n'
-PROMPT+=$'\nCommit type: '"$PREFIX"$'\n'
+PROMPT+='END_DIFF\n'
+PROMPT+=$'\nCommit type: '"$PREFIX"$'\nRESPONSE_JSON: '
 # 🔐 Why this works:
 #     <<'EOF' (note the single quotes) prevents variable expansion ($DIFF, $PREFIX, etc.) inside the heredoc body.
 #     You concatenate the dynamic values ($DIFF, $PREFIX) safely after using cat <<'EOF'.
