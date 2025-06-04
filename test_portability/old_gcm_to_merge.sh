@@ -300,7 +300,7 @@ taskset -c "$CPU_RANGE" \
     --top-p 0.9 \
     --repeat-penalty 1.1 \
     $MLOCK $MMAP \
-    > "$OUTPUT_FILE" 2> "$LOG_FILE"
+    > "$OUTPUT_FILE" 2> "$LOG_FILE" &
 
 # echo PID so we know it's running, and to attach atop if we want to
 LLAMA_PID=$!
