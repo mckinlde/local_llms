@@ -265,10 +265,20 @@ taskset -c "$CPU_RANGE" \
     --repeat-penalty 1.1 \
     --mlock \
     --no-mmap \
-    > "$OUTPUT_FILE" 2>&1 &
+    # Fix 4: Use a different output file for stderr/logs vs model output
+    $LLAMA_CLI ... > "$OUTPUT_FILE" 2> "$LOG_FILE"
+
 
 LLAMA_PID=$!
 echo "LLAMA_PID: ${LLAMA_PID}"
+
+# Bonus: Add live progress
+# As a tiny bonus, here's how to live stream the output while it's running:
+tail -f "$OUTPUT_FILE" &
+TAIL_PID=$!
+
+wait "$LLAMA_PID"
+kill "$TAIL_PID"
 
 # === Optional: Monitor Resources ===
 # # get script directory
@@ -296,7 +306,30 @@ if $DEBUG; then
   echo
 fi
 
-COMMIT_MSG=$(jq -r '.commit_message // empty' "$OUTPUT_FILE" 2>/dev/null || true)
+
+# This block is printed as part of the output, but:
+#     It’s printed after some garbage text, making jq possibly fail.
+#     The model’s output includes pre-text, maybe logs or context repeats.
+#     You run jq . "$OUTPUT_FILE" — but "$OUTPUT_FILE" contains logs + model output, not pure JSON.
+
+# Fix 1: Extract clean JSON block from mixed output
+# Instead of passing the full output file to jq, extract just the JSON block before passing it:
+JSON_BLOCK=$(awk '/^{/{flag=1} flag; /^}/{exit}' "$OUTPUT_FILE")
+
+if [[ -n "$JSON_BLOCK" ]]; then
+  # Fix 2: Show what jq is seeing, even on failure
+  echo "🔍 Attempting to extract JSON from:"
+  grep -A5 -B5 'commit_message' "$OUTPUT_FILE"
+
+  COMMIT_MSG=$(jq -r '.commit_message // empty' "$OUTPUT_FILE" || true)
+fi
+
+# Fix 3: Strip logs and just print model output
+JSON_BLOCK=$(awk '/^{/{flag=1} flag' "$OUTPUT_FILE")
+
+if [[ -n "$JSON_BLOCK" ]]; then
+  COMMIT_MSG=$(jq -r '.commit_message // empty' <<< "$JSON_BLOCK" 2>/dev/null || true)
+fi
 
 # Fallback in case of malformed or missing JSON
 if [[ -z "$COMMIT_MSG" ]]; then
