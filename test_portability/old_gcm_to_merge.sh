@@ -213,6 +213,9 @@ Commit type: feat
 ---
 
 Now it's your turn.
+Respond ONLY with a JSON object on a single line. No commentary, no markdown. Format:
+{"commit_message": "your message here"}
+
 Git diff:
 EOF
 )
@@ -250,46 +253,40 @@ if $VERBOSE_DEBUG; then
 fi
 
 # === Resource Monitor moved to separate file ===
-
 # === Run Model ===
-echo
-echo "🧠 Running model with ctx-size=${CTX_SIZE} on $THREADS threads..."
+echo >&2
+echo "🧠 Running model with ctx-size=${CTX_SIZE} on $THREADS threads..." >&2
 
-OUTPUT_FILE=$(mktemp)
-LOG_FILE=$(mktemp)
+OUTPUT_FILE=$(mktemp)     # 📄 Where we'll write model output (pure stdout)
+LOG_FILE=$(mktemp)        # 🪵 Where we'll write internal logs and errors (stderr)
 
 # Build CPU affinity range for taskset
 CPU_RANGE=$(seq -s, 0 $(($THREADS - 1)))
-echo "THREADS = $THREADS"
-echo "CPU_RANGE = $CPU_RANGE"
+echo "🧵 THREADS = $THREADS" >&2
+echo "📍 CPU_RANGE = $CPU_RANGE" >&2
 
-# Check llama-cli exists
+# 🧪 Verify llama-cli is installed and runnable
 if ! command -v "$LLAMA_CLI" &>/dev/null; then
-  echo "❌ llama-cli not found: $LLAMA_CLI"
+  echo "❌ llama-cli not found: $LLAMA_CLI" >&2
   exit 127
 fi
 
-if $DEBUG; then  # echo taskset
-  echo "Prompt size (chars): $(echo "$PROMPT" | wc -m)"
-  echo "Prompt: $PROMPT"
-  echo "🧪 Running command:"
-  echo taskset -c "$CPU_RANGE" \
-    "$LLAMA_CLI" \
-    -m "$MODEL_PATH" \
-    -p "<prompt omitted>" \
-    -n "$OUTPUT_BUFFER" \
-    --ctx-size "$CTX_SIZE" \
-    --threads "$THREADS" \
-    --threads-batch "$THREADS" \
-    --temp 0.7 \
-    --top-k 100 \
-    --top-p 0.9 \
-    --repeat-penalty 1.1 \
-    $MLOCK $MMAP
+# 🛠️ Debug info about the model run
+if $DEBUG; then
+  echo "📏 Prompt size (chars): $(echo "$PROMPT" | wc -m)" >&2
+  echo "🧪 Running llama-cli (prompt omitted from this debug log)" >&2
+  echo taskset -c "$CPU_RANGE" "$LLAMA_CLI" -m "$MODEL_PATH" -p "<prompt omitted>" \
+    -n "$OUTPUT_BUFFER" --ctx-size "$CTX_SIZE" --threads "$THREADS" \
+    --threads-batch "$THREADS" --temp 0.7 --top-k 100 --top-p 0.9 \
+    --repeat-penalty 1.1 $MLOCK $MMAP >&2
 fi
 
-# test llama-cli manually 
-# taskset -c 0-7 ./llama-cli -m ./merged_model.gguf -p "test prompt" -n 10 --ctx-size 2048 --threads 8 --threads-batch 8 --mlock --no-mmap
+# ((( Note:
+#       to test llama-cli manually:
+# $ taskset -c 0-7 ./llama-cli -m ./merged_model.gguf -p "test prompt" -n 10 --ctx-size 2048 --threads 8 --threads-batch 8 --mlock --no-mmap
+# )))
+
+# 🚀 Run the model and collect its output
 taskset -c "$CPU_RANGE" \
   "$LLAMA_CLI" \
     -m "$MODEL_PATH" \
@@ -302,30 +299,33 @@ taskset -c "$CPU_RANGE" \
     --top-k 100 \
     --top-p 0.9 \
     --repeat-penalty 1.1 \
-    --mlock \
-    --no-mmap \
-    > "$OUTPUT_FILE" 2> "$LOG_FILE" &
+    $MLOCK $MMAP \
+    > "$OUTPUT_FILE" 2> "$LOG_FILE"
+
+# echo PID so we know it's running, and to attach atop if we want to
 LLAMA_PID=$!
 echo "LLAMA_PID: ${LLAMA_PID}"
-
+# wait for llama to finish
 wait "$LLAMA_PID"
+# note the exit code
 LLAMA_EXIT_CODE=$?
+echo "🧠 llama-cli exited with code: $LLAMA_EXIT_CODE" >&2
 
-# If debug, print logs to console
-if $DEBUG; then  
-  echo
-  echo "--- STDOUT ---"
-  cat "$OUTPUT_FILE" || echo "(none)"
-  echo "--- STDERR ---"
-  cat "$LOG_FILE" || echo "(none)"
-  echo
+# 📦 Debug: show logs and output if enabled
+if $DEBUG; then
+  echo >&2
+  echo "🧠 llama-cli exited with code: $LLAMA_EXIT_CODE" >&2
+  echo "📤 --- STDOUT (model output) ---" >&2
+  cat "$OUTPUT_FILE" >&2 || echo "(none)" >&2
+  echo "🪵 --- STDERR (logs) ---" >&2
+  cat "$LOG_FILE" >&2 || echo "(none)" >&2
+  echo "💾 Saving logs to llama_output.log and llama_debug.log" >&2
 fi
-# Always echo llama exit code and save logs to logfiles
-echo "🧠 llama-cli exited with code: $LLAMA_EXIT_CODE"
-echo
-echo "💾 Saving logs (debug)..."
-cp "$LOG_FILE" llama_debug.log
+
+# 💽 Persist output and logs for later review
 cp "$OUTPUT_FILE" llama_output.log
+cp "$LOG_FILE" llama_debug.log
+
 
 # === Extract commit message ===
 #JSON_BLOCK=$(awk '/^{/{flag=1} flag; /^}/{exit}' "$OUTPUT_FILE")
@@ -341,6 +341,15 @@ if [[ -n "$JSON_BLOCK" ]]; then
 
   COMMIT_MSG=$(jq -r '.commit_message // empty' <<< "$JSON_BLOCK" 2>/dev/null || true)
 fi
+# fallback to parse single-line commit messages
+if [[ -z "$COMMIT_MSG" ]]; then
+  COMMIT_MSG=$(grep -oP '"commit_message"\s*:\s*"\K[^"]+' "$OUTPUT_FILE" | head -n 1)
+fi
+# if that still fails, use:
+if [[ -z "$COMMIT_MSG" ]]; then
+  COMMIT_MSG=$(grep -E '^[[:alnum:]].{5,}$' "$OUTPUT_FILE" | head -n 1)
+fi
+
 
 # Fallback if JSON parse fails
 # ToDo: This is kinda old and maybe obviated
