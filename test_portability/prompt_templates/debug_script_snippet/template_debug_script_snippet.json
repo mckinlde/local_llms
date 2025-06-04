@@ -1,0 +1,7 @@
+ {
+  "start_prompt": "Here is my script output:",
+  "script_output": "$SCRIPT_OUTPUT",
+  "script_snippet_intro": "And here is the relevant script snippet:",
+  "script_snippet": "$SCRIPT_SNIPPET",
+  "question": "Why is my script $BAD_BEHAVIOUR?"
+}
