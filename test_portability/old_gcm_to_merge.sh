@@ -190,31 +190,42 @@ select PREFIX in "feat" "fix" "docs" "chore" "refactor" "test" "style" "perf" "c
 done
 
 # === Construct Prompt ===
-PROMPT="You are writing a commit message. You will be shown a Git diff and a Commit type.  
+# Best Practice: Use a Here Document (Heredoc) with quoted delimiter
+# This is the most durable and safe way to pass raw code (like diffs or logs) into a variable or file in Bash:
+PROMPT=$(cat <<'EOF'
+You are writing a commit message. You will be shown a Git diff and a Commit type.  
 Generate a commit message corresponding to the Commit type that describes the changes made in the Git diff.
 Only output JSON structured like this:
 {
-  \"commit_message\": \"your concise message here\"
+  "commit_message": "your concise message here"
 }
 
 Example:
 Git diff:
 - def foo(): pass
-+ def foo(): print(\"bar\")
++ def foo(): print("bar")
 
 Commit type: feat
 {
-  \"commit_message\": \"print output in foo()\"
+  "commit_message": "print output in foo()"
 }
 
 ---
 
 Now it's your turn.
 Git diff:
-$DIFF
+EOF
+)
 
-Commit type: $PREFIX
-"
+PROMPT+=$'\n'"$DIFF"$'\n'
+PROMPT+=$'\nCommit type: '"$PREFIX"$'\n'
+# 🔐 Why this works:
+#     <<'EOF' (note the single quotes) prevents variable expansion ($DIFF, $PREFIX, etc.) inside the heredoc body.
+#     You concatenate the dynamic values ($DIFF, $PREFIX) safely after using cat <<'EOF'.
+# 🚫 Avoid
+# Avoid double quotes around heredocs, like <<EOF, because:
+#     Bash will interpret $DIFF, $PREFIX, and any backslashes or quotes inside it.
+#     This will break if your diff includes Bash code, shell metacharacters, or JSON syntax.
 
 # === Estimate Prompt Token Count ===
 EST_TOKEN_COUNT_PROMPT=$(echo "$PROMPT" | wc -w)
@@ -239,6 +250,7 @@ if $VERBOSE_DEBUG; then
 fi
 
 # === Resource Monitor moved to separate file ===
+
 # === Run Model ===
 echo
 echo "🧠 Running model with ctx-size=${CTX_SIZE} on $THREADS threads..."
@@ -251,6 +263,33 @@ CPU_RANGE=$(seq -s, 0 $(($THREADS - 1)))
 echo "THREADS = $THREADS"
 echo "CPU_RANGE = $CPU_RANGE"
 
+# Check llama-cli exists
+if ! command -v "$LLAMA_CLI" &>/dev/null; then
+  echo "❌ llama-cli not found: $LLAMA_CLI"
+  exit 127
+fi
+
+if $DEBUG; then  # echo taskset
+  echo "Prompt size (chars): $(echo "$PROMPT" | wc -m)"
+  echo "Prompt: $PROMPT"
+  echo "🧪 Running command:"
+  echo taskset -c "$CPU_RANGE" \
+    "$LLAMA_CLI" \
+    -m "$MODEL_PATH" \
+    -p "<prompt omitted>" \
+    -n "$OUTPUT_BUFFER" \
+    --ctx-size "$CTX_SIZE" \
+    --threads "$THREADS" \
+    --threads-batch "$THREADS" \
+    --temp 0.7 \
+    --top-k 100 \
+    --top-p 0.9 \
+    --repeat-penalty 1.1 \
+    $MLOCK $MMAP
+fi
+
+# test llama-cli manually 
+# taskset -c 0-7 ./llama-cli -m ./merged_model.gguf -p "test prompt" -n 10 --ctx-size 2048 --threads 8 --threads-batch 8 --mlock --no-mmap
 taskset -c "$CPU_RANGE" \
   "$LLAMA_CLI" \
     -m "$MODEL_PATH" \
@@ -269,30 +308,32 @@ taskset -c "$CPU_RANGE" \
 LLAMA_PID=$!
 echo "LLAMA_PID: ${LLAMA_PID}"
 
-# Live progress tail
-tail -f "$OUTPUT_FILE" &
-TAIL_PID=$!
-trap "kill $TAIL_PID 2>/dev/null" EXIT
-
 wait "$LLAMA_PID"
-kill "$TAIL_PID" 2>/dev/null
-wait "$LLAMA_PID"
-
 LLAMA_EXIT_CODE=$?
-if [[ $LLAMA_EXIT_CODE -ne 0 ]]; then
-  echo "❌ llama-cli exited with code $LLAMA_EXIT_CODE"
-  cat "$LOG_FILE"
-  exit $LLAMA_EXIT_CODE
-fi
 
-if $DEBUG; then
-  echo "📦 Raw model output:"
-  cat "$OUTPUT_FILE"
+# If debug, print logs to console
+if $DEBUG; then  
+  echo
+  echo "--- STDOUT ---"
+  cat "$OUTPUT_FILE" || echo "(none)"
+  echo "--- STDERR ---"
+  cat "$LOG_FILE" || echo "(none)"
   echo
 fi
+# Always echo llama exit code and save logs to logfiles
+echo "🧠 llama-cli exited with code: $LLAMA_EXIT_CODE"
+echo
+echo "💾 Saving logs (debug)..."
+cp "$LOG_FILE" llama_debug.log
+cp "$OUTPUT_FILE" llama_output.log
 
 # === Extract commit message ===
-JSON_BLOCK=$(awk '/^{/{flag=1} flag; /^}/{exit}' "$OUTPUT_FILE")
+#JSON_BLOCK=$(awk '/^{/{flag=1} flag; /^}/{exit}' "$OUTPUT_FILE")
+# Grep from the bottom.
+  # tac reverses the file
+  # awk grabs the last JSON block
+  # Second tac restores correct order
+JSON_BLOCK=$(tac "$OUTPUT_FILE" | awk '/^{/{flag=1} flag; /^}/{exit}' | tac)
 
 if [[ -n "$JSON_BLOCK" ]]; then
   echo "🔍 Attempting to extract JSON from:"
@@ -302,6 +343,7 @@ if [[ -n "$JSON_BLOCK" ]]; then
 fi
 
 # Fallback if JSON parse fails
+# ToDo: This is kinda old and maybe obviated
 if [[ -z "$COMMIT_MSG" ]]; then
   COMMIT_MSG=$(grep -E '^[[:alnum:]].{5,}$' "$OUTPUT_FILE" | head -n 1)
 fi
@@ -310,6 +352,15 @@ if $DEBUG; then
   echo
   echo "🔍 Parsed JSON:"
   echo "$JSON_BLOCK" | jq . || echo "⚠️ JSON parse failed"
+fi
+
+if [[ -z "$COMMIT_MSG" ]]; then
+  echo "⚠️  No commit message extracted."
+  # If no commit message, log the files even when not in debug
+  echo "== FULL OUTPUT =="
+  cat "$OUTPUT_FILE"
+  echo "== LOG FILE =="
+  cat "$LOG_FILE"
 fi
 
 # === Confirm and Commit ===
