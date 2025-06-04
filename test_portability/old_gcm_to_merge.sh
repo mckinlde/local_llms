@@ -41,7 +41,8 @@ CTX_SIZE=2048 # Total model context window in tokens (prompt + output).
 
 MLOCK=--mlock # force system to keep model in RAM rather than swapping or compressing
               #                          (env: LLAMA_ARG_MLOCK)
-THREADS=4 # use `$ nproc` to see how many threads you have avaliable
+MMAP=--no-mmap # The llama.cpp --help swears this isn't the flag to force RAM, but it is definetly the flag that causes me to see RAM use go up.
+THREADS=8 # use `$ nproc` to see how many threads you have avaliable
 # my CPU has 8 (4 cores w/2 threads per core); don't set to max to avoid oversubscription causing contention
 
 OUTPUT_BUFFER=128 # Max number of tokens to generate in the output, May crash if prompt is too long
@@ -140,9 +141,9 @@ if [[ -z "$DIFF" ]]; then
   fi
 fi
 
-# === Estimate Token Count ===
+# === Estimate Diff Token Count ===
 EST_TOKEN_COUNT=$(echo "$DIFF" | wc -w)
-$DEBUG && echo "📏 Estimated token count: $EST_TOKEN_COUNT" >&2
+$DEBUG && echo "📏 Estimated Diff token count: $EST_TOKEN_COUNT" >&2
 # If you're ever unsure of the true token count, consider using 
 # llama_tokenize (if available) to get real token counts instead 
 # of wc -w, which is a rough estimate.
@@ -189,15 +190,36 @@ select PREFIX in "feat" "fix" "docs" "chore" "refactor" "test" "style" "perf" "c
 done
 
 # === Construct Prompt ===
-PROMPT="You are a commit message generator.
+PROMPT="You are writing a commit message. You will be shown a Git diff and a Commit type.  
+Generate a commit message corresponding to the Commit type that describes the changes made in the Git diff.
+Only output JSON structured like this:
+{
+  \"commit_message\": \"your concise message here\"
+}
 
-You will be given a git diff. Your task is to write a Conventional Commit message body (not including the type prefix) that concisely summarizes the change.
-
-The final commit message will be: \"${PREFIX}\${COMMIT_MSG}\"
-Return only the \${COMMIT_MSG} part, with no punctuation at the end unless it is required, and no quotes or additional text.
-
+Example:
 Git diff:
-$DIFF"
+- def foo(): pass
++ def foo(): print(\"bar\")
+
+Commit type: feat
+{
+  \"commit_message\": \"print output in foo()\"
+}
+
+---
+
+Now it's your turn.
+Git diff:
+$DIFF
+
+Commit type: $PREFIX
+"
+
+# === Estimate Prompt Token Count ===
+EST_TOKEN_COUNT_PROMPT=$(echo "$PROMPT" | wc -w)
+$DEBUG && echo "📏 Estimated Prompt token count: $EST_TOKEN_COUNT_PROMPT" >&2
+
 
 if $DEBUG; then
   echo >&2
@@ -206,6 +228,7 @@ if $DEBUG; then
   echo "Chars:  $(echo "$PROMPT" | wc -m)" >&2
   echo "Words:  $(echo "$PROMPT" | wc -w)" >&2
   echo "Bytes:  $(echo "$PROMPT" | wc -c)" >&2
+  echo "Prompt est. token count:  $EST_TOKEN_COUNT_PROMPT" >&2
   echo "Using context size: $CTX_SIZE" >&2
   echo "----------------------------------------" >&2
 fi
@@ -215,77 +238,77 @@ if $VERBOSE_DEBUG; then
   echo "----------------------------------------" >&2
 fi
 
-# === Function to Monitor RAM ===
-monitor_ram() {
-  local pid=$1
-  local count=0
-  local sum_mem=0
-  local peak_mem=0
-
-  tput civis  # Hide cursor
-  trap 'tput cnorm; echo; exit' INT TERM EXIT  # Restore cursor on exit & add newline
-
-  while kill -0 "$pid" 2>/dev/null; do
-    local rss_kb=$(ps -o rss= -p "$pid")
-    local mem_mb=$((rss_kb / 1024))
-
-    ((count++))
-    sum_mem=$((sum_mem + mem_mb))
-    ((mem_mb > peak_mem)) && peak_mem=$mem_mb
-    local avg_mem=$((sum_mem / count))
-
-    printf "\r🧠 RAM Usage - Current: %4d MB | Peak: %4d MB | Average: %4d MB" "$mem_mb" "$peak_mem" "$avg_mem"
-
-    sleep 1
-  done
-
-  # Final print with newline, keep latest stats visible
-  printf "\r🧠 RAM Usage - Current: %4d MB | Peak: %4d MB | Average: %4d MB\n" "$mem_mb" "$peak_mem" "$avg_mem"
-  tput cnorm  # Restore cursor
-}
-# ./old_gcm_to_merge.sh: line 265: $1: unbound variable
-# ./old_gcm_to_merge.sh: line 265: Peak:: command not found
-# ./old_gcm_to_merge.sh: line 265: mem_mb: unbound variable
-# ./old_gcm_to_merge.sh: line 271: Peak:: command not found
-# ./old_gcm_to_merge.sh: line 271: mem_mb: unbound variable
+# === Resource Monitor moved to separate file ===
 
 # === Run Model ===
 echo
-echo "🧠 Running model with ctx-size=${CTX_SIZE}..."
+echo "🧠 Running model with ctx-size=${CTX_SIZE} on $THREADS threads..."
 
-# Start llama-cli in background
-# Try running with `--mlock` to force full model load into RAM
-# That should push RAM usage closer to 8–9 GB and reduce disk overhead.
 OUTPUT_FILE=$(mktemp)
-$LLAMA_CLI \
-  -m "$MODEL_PATH" \
-  -p "$PROMPT" \
-  -n $OUTPUT_BUFFER \
-  --temp 0.2 \
-  --top-k 40 \
-  --top-p 0.9 \
-  --repeat-penalty 1.1 \
-  --ctx-size "$CTX_SIZE" \
-  $MLOCK \
-  --threads $THREADS \
-  > "$OUTPUT_FILE" 2>&1 &
-LLAMA_PID=$!
 
-if $DEBUG; then
-  monitor_ram "$LLAMA_PID" &
-fi
+# Build CPU affinity range for taskset
+CPU_RANGE=$(seq -s, 0 $(($THREADS - 1)))
+echo "THREADS = $THREADS"
+echo "CPU_RANGE = $CPU_RANGE"
+
+taskset -c "$CPU_RANGE" \
+  $LLAMA_CLI \
+    -m "$MODEL_PATH" \
+    -p "$PROMPT" \
+    -n $OUTPUT_BUFFER \
+    --ctx-size "$CTX_SIZE" \
+    --threads $THREADS \
+    --threads-batch $THREADS \
+    --temp 0.7 \
+    --top-k 100 \
+    --top-p 0.9 \
+    --repeat-penalty 1.1 \
+    --mlock \
+    --no-mmap \
+    > "$OUTPUT_FILE" 2>&1 &
+
+LLAMA_PID=$!
+echo "LLAMA_PID: ${LLAMA_PID}"
+
+# === Optional: Monitor Resources ===
+# # get script directory
+# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# # Launch monitor in background
+# "$SCRIPT_DIR/resource_monitor.sh" "$LLAMA_PID" &
+# to run resource monitor in a new terminal:
+# ./resource_monitor.sh $(pgrep -f llama-cli)
 
 wait "$LLAMA_PID"
-RAW_OUTPUT=$(cat "$OUTPUT_FILE")
-rm "$OUTPUT_FILE"
+# More graceful handling of model errors.
+# Optionally, different behavior for specific exit codes.
+# Avoids silent failure if llama-cli dies (e.g., OOM).
+LLAMA_EXIT_CODE=$?
+if [[ $LLAMA_EXIT_CODE -ne 0 ]]; then
+  echo "❌ llama-cli exited with code $LLAMA_EXIT_CODE"
+  cat "$OUTPUT_FILE"
+  exit $LLAMA_EXIT_CODE
+fi
 
 # === Extract Message ===
-COMMIT_MSG=$(echo "$RAW_OUTPUT" | head -n 1)
+if $DEBUG; then
+  echo "📦 Raw model output:"
+  cat "$OUTPUT_FILE"
+  echo
+fi
+
+COMMIT_MSG=$(jq -r '.commit_message // empty' "$OUTPUT_FILE" 2>/dev/null || true)
+
+# Fallback in case of malformed or missing JSON
+if [[ -z "$COMMIT_MSG" ]]; then
+  COMMIT_MSG=$(grep -E '^[[:alnum:]].{5,}$' "$OUTPUT_FILE" | head -n 1)
+fi
 
 if $DEBUG; then
-  echo "📤 Raw output: $RAW_OUTPUT" >&2
-  echo "✅ Commit message: $COMMIT_MSG" >&2
+  echo
+  echo "🔍 Parsed JSON:"
+  jq . "$OUTPUT_FILE" || echo "⚠️ JSON parse failed"
 fi
+
 
 # === Confirm and Commit ===
 echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG"
@@ -293,6 +316,7 @@ if $DRY_RUN; then
   echo "Dry Run Mode, exiting..."
   exit 0
 fi
+
 read -rp "✅ Press ENTER to approve and commit, or q to quit: " confirm
 if [[ "$confirm" == "q" ]]; then
   echo "❌ Commit canceled."
