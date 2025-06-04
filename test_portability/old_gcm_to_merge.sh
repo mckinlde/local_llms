@@ -199,13 +199,11 @@ DO NOT include commentary, Markdown, or formatting.
 Only return:
 {"commit_message": "your message here"}
 
-BEGIN_DIFF
+### BEGIN_DIFF
 EOF
 )
 
-PROMPT+=$'\n'"$DIFF"$'\n'
-PROMPT+='END_DIFF\n'
-PROMPT+=$'\nCommit type: '"$PREFIX"$'\nRESPONSE_JSON: '
+PROMPT+=$'\n'"$DIFF"$'\n### END_DIFF\nCommit type: '"$PREFIX"$'\n### RESPONSE_JSON\n'
 # 🔐 Why this works:
 #     <<'EOF' (note the single quotes) prevents variable expansion ($DIFF, $PREFIX, etc.) inside the heredoc body.
 #     You concatenate the dynamic values ($DIFF, $PREFIX) safely after using cat <<'EOF'.
