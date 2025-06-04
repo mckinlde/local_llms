@@ -239,12 +239,12 @@ if $VERBOSE_DEBUG; then
 fi
 
 # === Resource Monitor moved to separate file ===
-
 # === Run Model ===
 echo
 echo "🧠 Running model with ctx-size=${CTX_SIZE} on $THREADS threads..."
 
 OUTPUT_FILE=$(mktemp)
+LOG_FILE=$(mktemp)
 
 # Build CPU affinity range for taskset
 CPU_RANGE=$(seq -s, 0 $(($THREADS - 1)))
@@ -252,86 +252,56 @@ echo "THREADS = $THREADS"
 echo "CPU_RANGE = $CPU_RANGE"
 
 taskset -c "$CPU_RANGE" \
-  $LLAMA_CLI \
+  "$LLAMA_CLI" \
     -m "$MODEL_PATH" \
     -p "$PROMPT" \
-    -n $OUTPUT_BUFFER \
+    -n "$OUTPUT_BUFFER" \
     --ctx-size "$CTX_SIZE" \
-    --threads $THREADS \
-    --threads-batch $THREADS \
+    --threads "$THREADS" \
+    --threads-batch "$THREADS" \
     --temp 0.7 \
     --top-k 100 \
     --top-p 0.9 \
     --repeat-penalty 1.1 \
     --mlock \
     --no-mmap \
-    # Fix 4: Use a different output file for stderr/logs vs model output
-    $LLAMA_CLI ... > "$OUTPUT_FILE" 2> "$LOG_FILE"
-
-
+    > "$OUTPUT_FILE" 2> "$LOG_FILE" &
 LLAMA_PID=$!
 echo "LLAMA_PID: ${LLAMA_PID}"
 
-# Bonus: Add live progress
-# As a tiny bonus, here's how to live stream the output while it's running:
+# Live progress tail
 tail -f "$OUTPUT_FILE" &
 TAIL_PID=$!
+trap "kill $TAIL_PID 2>/dev/null" EXIT
 
 wait "$LLAMA_PID"
-kill "$TAIL_PID"
-
-# === Optional: Monitor Resources ===
-# # get script directory
-# SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# # Launch monitor in background
-# "$SCRIPT_DIR/resource_monitor.sh" "$LLAMA_PID" &
-# to run resource monitor in a new terminal:
-# ./resource_monitor.sh $(pgrep -f llama-cli)
-
+kill "$TAIL_PID" 2>/dev/null
 wait "$LLAMA_PID"
-# More graceful handling of model errors.
-# Optionally, different behavior for specific exit codes.
-# Avoids silent failure if llama-cli dies (e.g., OOM).
+
 LLAMA_EXIT_CODE=$?
 if [[ $LLAMA_EXIT_CODE -ne 0 ]]; then
   echo "❌ llama-cli exited with code $LLAMA_EXIT_CODE"
-  cat "$OUTPUT_FILE"
+  cat "$LOG_FILE"
   exit $LLAMA_EXIT_CODE
 fi
 
-# === Extract Message ===
 if $DEBUG; then
   echo "📦 Raw model output:"
   cat "$OUTPUT_FILE"
   echo
 fi
 
-
-# This block is printed as part of the output, but:
-#     It’s printed after some garbage text, making jq possibly fail.
-#     The model’s output includes pre-text, maybe logs or context repeats.
-#     You run jq . "$OUTPUT_FILE" — but "$OUTPUT_FILE" contains logs + model output, not pure JSON.
-
-# Fix 1: Extract clean JSON block from mixed output
-# Instead of passing the full output file to jq, extract just the JSON block before passing it:
+# === Extract commit message ===
 JSON_BLOCK=$(awk '/^{/{flag=1} flag; /^}/{exit}' "$OUTPUT_FILE")
 
 if [[ -n "$JSON_BLOCK" ]]; then
-  # Fix 2: Show what jq is seeing, even on failure
   echo "🔍 Attempting to extract JSON from:"
-  grep -A5 -B5 'commit_message' "$OUTPUT_FILE"
+  echo "$JSON_BLOCK"
 
-  COMMIT_MSG=$(jq -r '.commit_message // empty' "$OUTPUT_FILE" || true)
-fi
-
-# Fix 3: Strip logs and just print model output
-JSON_BLOCK=$(awk '/^{/{flag=1} flag' "$OUTPUT_FILE")
-
-if [[ -n "$JSON_BLOCK" ]]; then
   COMMIT_MSG=$(jq -r '.commit_message // empty' <<< "$JSON_BLOCK" 2>/dev/null || true)
 fi
 
-# Fallback in case of malformed or missing JSON
+# Fallback if JSON parse fails
 if [[ -z "$COMMIT_MSG" ]]; then
   COMMIT_MSG=$(grep -E '^[[:alnum:]].{5,}$' "$OUTPUT_FILE" | head -n 1)
 fi
@@ -339,9 +309,8 @@ fi
 if $DEBUG; then
   echo
   echo "🔍 Parsed JSON:"
-  jq . "$OUTPUT_FILE" || echo "⚠️ JSON parse failed"
+  echo "$JSON_BLOCK" | jq . || echo "⚠️ JSON parse failed"
 fi
-
 
 # === Confirm and Commit ===
 echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG"
