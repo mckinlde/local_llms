@@ -1,0 +1,13 @@
+Here's my workflow:
+
+While True:
+    - run script in vscode window
+    [dmei@nixos:~/experiments/local_llms/test_portability]$ ./old_gcm_to_merge.sh
+    🔍 Collecting git diff...
+    - cp 'llama_output.log' && Console Log from vscode
+    - paste into chatgpt
+    - cp snippet from chatgpt
+    - paste into script
+----------]
+
+It seems like I should be able to automate this, hence the files in /debug_script_snippet
