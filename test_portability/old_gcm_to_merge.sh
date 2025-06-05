@@ -196,8 +196,7 @@ PROMPT=$(cat <<'EOF'
 You are writing a commit message. Your task is to analyze the Git diff and output only a one-line JSON object.
 DO NOT repeat the Git diff or prefix.
 DO NOT include commentary, Markdown, or formatting.
-Only return:
-{"commit_message": "your message here"}
+Only return a commit message describing the change made in the diff
 
 ### BEGIN_DIFF
 EOF
@@ -310,49 +309,64 @@ cp "$LOG_FILE" llama_debug.log
 
 
 # === Extract commit message ===
-#JSON_BLOCK=$(awk '/^{/{flag=1} flag; /^}/{exit}' "$OUTPUT_FILE")
-# Grep from the bottom.
-  # tac reverses the file
-  # awk grabs the last JSON block
-  # Second tac restores correct order
-JSON_BLOCK=$(tac "$OUTPUT_FILE" | awk '/^{/{flag=1} flag; /^}/{exit}' | tac)
+# ToDo: turn this into a helper CLI script (e.g. parse_llama_output.sh), 
+# or if you're planning to port it to Python for better reliability long-term.
+# OUTPUT_FILE="llama_output.log"
+#!/usr/bin/env bash
 
-if [[ -n "$JSON_BLOCK" ]]; then
-  echo "🔍 Attempting to extract JSON from:"
-  echo "$JSON_BLOCK"
+# Step 1: Extract line with RESPONSE_JSON and [end of text]
+MODEL_OUTPUT=$(awk '
+  /RESPONSE_JSON/ && /\[end of text\]/ {
+    match($0, /RESPONSE_JSON[[:space:]]*(.*)\[end of text\]/, arr)
+    print arr[1]
+    exit
+  }
+' "$OUTPUT_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
-  COMMIT_MSG=$(jq -r '.commit_message // empty' <<< "$JSON_BLOCK" 2>/dev/null || true)
+echo "📥 Extracted raw model output: $MODEL_OUTPUT"
+
+# Step 2: Try parsing as JSON if it looks like JSON
+if [[ "$MODEL_OUTPUT" =~ ^\{.*\}$ ]]; then
+  COMMIT_MSG=$(echo "$MODEL_OUTPUT" | jq -r '.commit_message // empty' 2>/dev/null || true)
+else
+  COMMIT_MSG="$MODEL_OUTPUT"
 fi
-# fallback to parse single-line commit messages
+
+# Step 3: Filter out placeholders
+if [[ "$COMMIT_MSG" == "your message here" ]]; then
+  COMMIT_MSG=""
+fi
+
+# Step 4: Fallback — search for likely commit message
 if [[ -z "$COMMIT_MSG" ]]; then
-  COMMIT_MSG=$(grep -oP '"commit_message"\s*:\s*"\K[^"]+' "$OUTPUT_FILE" | head -n 1)
-fi
-# if that still fails, use:
-if [[ -z "$COMMIT_MSG" ]]; then
-  COMMIT_MSG=$(grep -E '^[[:alnum:]].{5,}$' "$OUTPUT_FILE" | head -n 1)
+  COMMIT_MSG=$(grep -E '^[[:alnum:]][^"]{5,}$' "$OUTPUT_FILE" | tail -n 1 || true)
+  echo "🛑 Final fallback commit message: $COMMIT_MSG"
 fi
 
-
-# Fallback if JSON parse fails
-# ToDo: This is kinda old and maybe obviated
-if [[ -z "$COMMIT_MSG" ]]; then
-  COMMIT_MSG=$(grep -E '^[[:alnum:]].{5,}$' "$OUTPUT_FILE" | head -n 1)
+# Step 5: Final output
+if [[ -n "$COMMIT_MSG" ]]; then
+  echo "✅ Final extracted commit message: $COMMIT_MSG"
+else
+  echo "❌ No valid commit message could be extracted."
 fi
 
-if $DEBUG; then
-  echo
-  echo "🔍 Parsed JSON:"
-  echo "$JSON_BLOCK" | jq . || echo "⚠️ JSON parse failed"
+# Step 6: Post-processing
+# Assume SELECTED_PREFIX is like "style" (no colon)
+SELECTED_PREFIX=$PREFIX
+
+# Normalize both strings for comparison (lowercase, trim)
+msg_clean=$(echo "$COMMIT_MSG" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//' | tr '[:upper:]' '[:lower:]')
+prefix_clean=$(echo "$SELECTED_PREFIX" | tr '[:upper:]' '[:lower:]')
+
+# Remove model prefix if it matches selected
+if [[ "$msg_clean" == "$prefix_clean:"* ]]; then
+  # Strip prefix from model output
+  COMMIT_MSG=$(echo "$COMMIT_MSG" | sed -E "s/^$SELECTED_PREFIX:[[:space:]]*//")
 fi
 
-if [[ -z "$COMMIT_MSG" ]]; then
-  echo "⚠️  No commit message extracted."
-  # If no commit message, log the files even when not in debug
-  echo "== FULL OUTPUT =="
-  cat "$OUTPUT_FILE"
-  echo "== LOG FILE =="
-  cat "$LOG_FILE"
-fi
+# Compose final message
+FINAL_COMMIT_MSG="$SELECTED_PREFIX: $COMMIT_MSG"
+echo "📝 Suggested commit message: $FINAL_COMMIT_MSG"
 
 # === Confirm and Commit ===
 echo "📝 Suggested commit message: $PREFIX: $COMMIT_MSG"
