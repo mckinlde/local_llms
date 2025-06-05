@@ -15,7 +15,7 @@ scratchpad.txt
 *.ckpt
 *.onnx
 *.h5
-*. gguf
+*.gguf
 
 # Ignore downloaded or generated model folders
 models/
