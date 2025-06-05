@@ -1,0 +1,56 @@
+===== usage =====
+Option A: With inline environment variables
+
+SCRIPT_OUTPUT="Hello world" \
+SCRIPT_SNIPPET="echo hello" \
+BAD_BEHAVIOUR="crashing unexpectedly" \
+./render-template.sh template.json rendered.json
+
+Option B: With a .env file
+
+Create .env:
+
+export SCRIPT_OUTPUT="Hello world"
+export SCRIPT_SNIPPET="echo hello"
+export BAD_BEHAVIOUR="crashing unexpectedly"
+
+Then load and run:
+
+source .env
+./render-template.sh template.json rendered.json
+===== end usage =====
+===== template.json =====
+{
+  "start_prompt": "Here is my script output:",
+  "script_output": "$SCRIPT_OUTPUT",
+  "script_snippet_intro": "And here is the relevant script snippet:",
+  "script_snippet": "$SCRIPT_SNIPPET",
+  "question": "Why is my script $BAD_BEHAVIOUR?"
+}
+===== end template.json =====
+===== render_template.sh =====
+#!/usr/bin/env bash
+set -euo pipefail
+
+# === Usage ===
+# ./render-template.sh template.json output.json
+# or:
+# VAR1=value VAR2=value ./render-template.sh template.json
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "Usage: $0 <template.json> [output.json]"
+  exit 1
+fi
+
+TEMPLATE_FILE="$1"
+OUTPUT_FILE="${2:-/dev/stdout}"
+
+if ! command -v envsubst >/dev/null; then
+  echo "Error: 'envsubst' is not installed. Try 'sudo apt install gettext' or 'nix-shell -p gettext'."
+  exit 2
+fi
+
+# Render the file
+envsubst < "$TEMPLATE_FILE" > "$OUTPUT_FILE"
+===== end render_template.sh =====
+
