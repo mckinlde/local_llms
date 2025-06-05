@@ -26,6 +26,7 @@ pkgs.mkShell {
       . .venv/bin/activate
       pip install --upgrade pip
       pip install -r /home/dmei/experiments/local_llms/llama.cpp/requirements.txt
+      pip install peft
     else
       . .venv/bin/activate
     fi

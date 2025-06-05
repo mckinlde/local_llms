@@ -12,7 +12,7 @@ def main():
     print("Loading base model from local path...")
     base_model = LlamaForCausalLM.from_pretrained(
         base_model_path,
-        torch_dtype=torch.float32, # keep fp16 to save RAM if you want; if you get errors, switch to torch.float32
+        torch_dtype=torch.float16, # keep fp16 to save RAM if you want; if you get errors, switch to torch.float32
         device_map="cpu",    # <-- force all model parts onto CPU RAM
     )
 
