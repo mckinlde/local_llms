@@ -1,0 +1,12 @@
+Here is my script_output.log:
+```
+<script_output>
+```
+
+And here is my script:
+
+```
+<script>
+```
+
+Why is my script <problem> ?
